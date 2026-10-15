@@ -3,10 +3,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from urllib.parse import urlparse, parse_qs
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+# Packaged exe: bin\ sits next to PicTube.exe; source run: next to this file.
+BASE = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
 BIN = os.path.join(BASE, "bin")
 YTDLP = os.path.join(BIN, "yt-dlp.exe")
 FFMPEG_DIR = BIN
