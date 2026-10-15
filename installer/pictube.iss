@@ -46,44 +46,37 @@ Type: filesandordirs; Name: "{app}\_internal"
 
 [Code]
 var
-  DownloadPage: TDownloadWizardPage;
+  ProgressPage: TOutputProgressWizardPage;
 
 procedure InitializeWizard;
 begin
-  DownloadPage := CreateDownloadPage('파일 받는 중', '픽튜브와 다운로드 엔진(yt-dlp, FFmpeg)을 받고 있습니다.', nil);
+  ProgressPage := CreateOutputProgressPage('파일 받는 중', '픽튜브와 다운로드 엔진(yt-dlp, FFmpeg)을 받고 있습니다. 1~2분 걸릴 수 있습니다.');
 end;
 
+// 다운로드·SHA-256 검증·압축 풀기는 stage.ps1(curl.exe, 실패 시 재시도)이 하고, 임시 폴더의 stage 에 설치할 파일을 만듭니다.
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  T: String;
+  T, Err: AnsiString;
   Code: Integer;
 begin
   Result := True;
   if CurPageID <> wpReady then exit;
-  DownloadPage.Clear;
-  DownloadPage.Add('{#AppUrl}', 'app.zip', '{#AppSha}');
-  DownloadPage.Add('{#YtdlpUrl}', 'yt-dlp.exe', '{#YtdlpSha}');
-  DownloadPage.Add('{#FfUrl}', 'ffmpeg.zip', '{#FfSha}');
-  DownloadPage.Show;
+  ExtractTemporaryFile('stage.ps1');
+  T := ExpandConstant('{tmp}');
+  ProgressPage.SetText('받는 중...', '');
+  ProgressPage.ProgressBar.Style := npbstMarquee;
+  ProgressPage.Show;
   try
-    try
-      DownloadPage.Download; { SHA-256이 다르면 예외 }
-      DownloadPage.SetText('압축을 푸는 중...', '');
-      ExtractTemporaryFile('stage.ps1');
-      T := ExpandConstant('{tmp}');
-      if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-          '-NoProfile -ExecutionPolicy Bypass -File "' + T + '\stage.ps1" -T "' + T + '"',
-          '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
-      begin
-        SuppressibleMsgBox('받은 파일의 압축을 풀지 못했습니다. 다시 시도해 주세요.', mbCriticalError, MB_OK, IDOK);
-        Result := False;
-      end;
-    except
-      if not DownloadPage.AbortedByUser then
-        SuppressibleMsgBox('파일을 받지 못했습니다. 인터넷 연결을 확인해 주세요.' + #13#10 + GetExceptionMessage, mbCriticalError, MB_OK, IDOK);
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+        '-NoProfile -ExecutionPolicy Bypass -File "' + T + '\stage.ps1" -T "' + T + '"' +
+        ' -AppUrl "{#AppUrl}" -AppSha {#AppSha} -YtUrl "{#YtdlpUrl}" -YtSha {#YtdlpSha} -FfUrl "{#FfUrl}" -FfSha {#FfSha}',
+        '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+    begin
+      if not LoadStringFromFile(T + '\stage-error.txt', Err) then Err := '';
+      SuppressibleMsgBox('파일을 받지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.' + #13#10#13#10 + String(Err), mbCriticalError, MB_OK, IDOK);
       Result := False;
     end;
   finally
-    DownloadPage.Hide;
+    ProgressPage.Hide;
   end;
 end;
